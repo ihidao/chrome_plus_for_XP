@@ -512,8 +512,15 @@ UINT ParseHotkeys(std::wstring_view keys, bool no_repeat) {
       virtual_key = *vk;
   }
 
+#if !defined(CHROME_PLUS_TARGET_XP)
+  // MOD_NOREPEAT was added in Vista; XP's RegisterHotKey rejects this flag.
   if (no_repeat)
     modifiers |= MOD_NOREPEAT;
+#else
+  // XP has no equivalent RegisterHotKey flag, so key-repeat suppression
+  // cannot be requested through this API on that platform.
+  (void)no_repeat;
+#endif
 
   return MAKELPARAM(modifiers, virtual_key);
 }
