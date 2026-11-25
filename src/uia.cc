@@ -1,3 +1,14 @@
+#if defined(CHROME_PLUS_TARGET_XP)
+#include "uia.h"
+
+std::optional<TabHitResult> FindTabHitResult(POINT, bool, bool) { return std::nullopt; }
+bool SelectTab(const TabHitResult&) { return false; }
+std::optional<int> FindTabCount(HWND) { return std::nullopt; }
+bool IsOnTabBar(POINT) { return false; }
+bool IsOnBookmark(POINT) { return false; }
+bool IsOmniboxFocused() { return false; }
+bool IsOnNewTab(HWND, const std::vector<std::wstring>&) { return false; }
+#else
 #include "uia.h"
 
 #include <uiautomation.h>
@@ -1311,3 +1322,5 @@ bool IsOnNewTab(HWND hwnd, const std::vector<std::wstring>& extra_tab_names) {
 
   return false;
 }
+
+#endif  // CHROME_PLUS_TARGET_XP
