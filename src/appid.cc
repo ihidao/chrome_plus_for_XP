@@ -116,8 +116,8 @@ bool TargetsAppDir(IShellLinkW* link) {
     return false;
   }
   ::PathRemoveFileSpecW(path.data());
-  return ::CompareStringOrdinal(path.data(), -1, GetAppDir().c_str(), -1,
-                                TRUE) == CSTR_EQUAL;
+  return ::CompareStringW(LOCALE_INVARIANT, NORM_IGNORECASE, path.data(), -1,
+                          GetAppDir().c_str(), -1) == CSTR_EQUAL;
 }
 
 // Forwards to the wrapped object, which it owns one reference to. A
@@ -376,14 +376,23 @@ HRESULT WINAPI MyCoCreateInstance(REFCLSID rclsid,
   return hr;
 }
 
+using SetCurrentProcessExplicitAppUserModelIDFn = HRESULT(WINAPI*)(PCWSTR);
+using SHGetPropertyStoreForWindowFn = HRESULT(WINAPI*)(HWND, REFIID, void**);
+
+// These Shell APIs were introduced after Windows XP. Resolve them at runtime
+// so their absence does not prevent version.dll from loading on XP.
 auto RawSetCurrentProcessExplicitAppUserModelID =
-    SetCurrentProcessExplicitAppUserModelID;
+    reinterpret_cast<SetCurrentProcessExplicitAppUserModelIDFn>(GetProcAddress(
+        GetModuleHandleW(L"shell32.dll"),
+        "SetCurrentProcessExplicitAppUserModelID"));
 
 HRESULT WINAPI MySetCurrentProcessExplicitAppUserModelID(PCWSTR appid) {
   return RawSetCurrentProcessExplicitAppUserModelID(MapAppId(appid));
 }
 
-auto RawSHGetPropertyStoreForWindow = SHGetPropertyStoreForWindow;
+auto RawSHGetPropertyStoreForWindow =
+    reinterpret_cast<SHGetPropertyStoreForWindowFn>(GetProcAddress(
+        GetModuleHandleW(L"shell32.dll"), "SHGetPropertyStoreForWindow"));
 
 HRESULT WINAPI MySHGetPropertyStoreForWindow(HWND hwnd,
                                              REFIID riid,
@@ -406,9 +415,14 @@ HRESULT WINAPI MySHGetPropertyStoreForWindow(HWND hwnd,
 void SetAppId() {
   DetourTransactionBegin();
   DetourUpdateThread(GetCurrentThread());
-  DetourAttach(&RawSetCurrentProcessExplicitAppUserModelID,
-               MySetCurrentProcessExplicitAppUserModelID);
-  DetourAttach(&RawSHGetPropertyStoreForWindow, MySHGetPropertyStoreForWindow);
+  if (RawSetCurrentProcessExplicitAppUserModelID) {
+    DetourAttach(&RawSetCurrentProcessExplicitAppUserModelID,
+                 MySetCurrentProcessExplicitAppUserModelID);
+  }
+  if (RawSHGetPropertyStoreForWindow) {
+    DetourAttach(&RawSHGetPropertyStoreForWindow,
+                 MySHGetPropertyStoreForWindow);
+  }
   DetourAttach(&RawCoCreateInstance, MyCoCreateInstance);
   auto status = DetourTransactionCommit();
   if (status != NO_ERROR) {
