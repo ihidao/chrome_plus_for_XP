@@ -71,7 +71,7 @@ struct TabUiCache {
   bool fullscreen = false;
   // Windows without tab UI (popups, app windows) would re-run the resolve on
   // every click; remember the failure and retry at most once a second.
-  ULONGLONG retry_after_ticks = 0;
+  DWORD retry_after_ticks = 0;
   // Null when the container came from the fullscreen raw-view fallback (the
   // control view hides the tab strip region there).
   ComPtr<IUIAutomationElement> region;
@@ -693,7 +693,7 @@ TabUiCache* ResolveTabUi(UiaSession* session, HWND hwnd) {
     if (cache.container.element) {
       return &cache;
     }
-    if (GetTickCount64() < cache.retry_after_ticks) {
+    if (static_cast<LONG>(GetTickCount() - cache.retry_after_ticks) < 0) {
       return nullptr;
     }
   }
@@ -701,7 +701,7 @@ TabUiCache* ResolveTabUi(UiaSession* session, HWND hwnd) {
   cache = TabUiCache();
   cache.window = hwnd;
   cache.fullscreen = fullscreen;
-  cache.retry_after_ticks = GetTickCount64() + 1000;
+  cache.retry_after_ticks = GetTickCount() + 1000;
 
   const auto window_element = GetElementFromWindow(*session, hwnd);
   if (!window_element) {
