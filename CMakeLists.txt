@@ -9,35 +9,18 @@ project(chrome_plus LANGUAGES C CXX RC)
 if(NOT WIN32)
   message(FATAL_ERROR "Chrome++ Next only supports Windows.")
 endif()
+
 if(NOT MSVC)
   message(FATAL_ERROR "Chrome++ Next requires an MSVC-compatible compiler frontend.")
 endif()
 
+option(CHROME_PLUS_TARGET_XP "Build the Windows XP x86-only variant" ON)
+set(CHROME_PLUS_ARCH x86)
+set(CMAKE_VS_PLATFORM_NAME "Win32")
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-option(CHROME_PLUS_TARGET_XP "Build for Windows XP compatibility" ON)
-
-if(CMAKE_VS_PLATFORM_NAME)
-  string(TOLOWER "${CMAKE_VS_PLATFORM_NAME}" CHROME_PLUS_ARCH)
-  if(CHROME_PLUS_ARCH STREQUAL "win32")
-    set(CHROME_PLUS_ARCH x86)
-  endif()
-else()
-  set(CHROME_PLUS_ARCH "" CACHE STRING "Target architecture")
-  set_property(CACHE CHROME_PLUS_ARCH PROPERTY STRINGS x86 x64 arm64)
-endif()
-
-if(CHROME_PLUS_TARGET_XP)
-  if(NOT CHROME_PLUS_ARCH STREQUAL "x86" AND NOT CHROME_PLUS_ARCH STREQUAL "x64")
-    message(FATAL_ERROR "Windows XP builds support x86 or x64 only.")
-  endif()
-else()
-  if(NOT CHROME_PLUS_ARCH MATCHES "^(x86|x64|arm64)$")
-    message(FATAL_ERROR "CHROME_PLUS_ARCH must be x86, x64, or arm64.")
-  endif()
-endif()
 
 set(CHROME_PLUS_BUILD_VERSION "" CACHE STRING "Override the embedded build version")
 set(CHROME_PLUS_EFFECTIVE_BUILD_VERSION "${CHROME_PLUS_BUILD_VERSION}")
@@ -64,11 +47,18 @@ if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
   endif()
 endif()
 
-option(CHROME_PLUS_USE_VC_LTL "Use VC-LTL for optimized configurations" ON)
+option(CHROME_PLUS_USE_VC_LTL "Use VC-LTL for the XP-compatible CRT/runtime" ON)
 
 add_compile_definitions(UNICODE _UNICODE $<$<CONFIG:Debug>:_DEBUG>)
+
 if(CHROME_PLUS_TARGET_XP)
-  add_compile_definitions(CHROME_PLUS_TARGET_XP=1 WINVER=0x0501 _WIN32_WINNT=0x0501 NTDDI_VERSION=0x05010000)
+  add_compile_definitions(
+    CHROME_PLUS_TARGET_XP=1
+    WINVER=0x0501
+    _WIN32_WINNT=0x0501
+    NTDDI_VERSION=0x05010000
+    GetTickCount64=GetTickCount
+  )
 endif()
 
 add_compile_options(
@@ -78,25 +68,19 @@ add_compile_options(
 )
 
 add_library(detours STATIC
-  detours/src/detours.cpp detours/src/disasm.cpp detours/src/image.cpp detours/src/modules.cpp
+  detours/src/detours.cpp
+  detours/src/disasm.cpp
+  detours/src/image.cpp
+  detours/src/modules.cpp
+  detours/src/disolx86.cpp
 )
 target_include_directories(detours PUBLIC detours/src)
+target_compile_definitions(detours PRIVATE _X86_)
 target_compile_options(detours PRIVATE
   $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-unknown-pragmas>
   $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-reorder-ctor>
   $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-unused-local-typedef>
 )
-
-if(CHROME_PLUS_ARCH STREQUAL "x86")
-  target_compile_definitions(detours PRIVATE _X86_)
-  target_sources(detours PRIVATE detours/src/disolx86.cpp)
-elseif(CHROME_PLUS_ARCH STREQUAL "x64")
-  target_compile_definitions(detours PRIVATE _AMD64_)
-  target_sources(detours PRIVATE detours/src/disolx64.cpp)
-else()
-  target_compile_definitions(detours PRIVATE _ARM64_)
-  target_sources(detours PRIVATE detours/src/disolarm64.cpp)
-endif()
 
 add_library(mini_gzip STATIC mini_gzip/miniz.c mini_gzip/mini_gzip.c)
 target_include_directories(mini_gzip PUBLIC mini_gzip)
@@ -105,12 +89,41 @@ target_compile_options(mini_gzip PRIVATE
   $<$<COMPILE_LANG_AND_ID:C,MSVC>:/wd4267>
 )
 
-add_library(chrome_plus SHARED
-  src/appid.cc src/chrome++.cc src/chrome++.rc src/config.cc src/green.cc
-  src/hijack.cc src/hotkey.cc src/inputhook.cc src/keymapping.cc src/pakfile.cc
-  src/pakpatch.cc src/policies.cc src/portable.cc src/tabbookmark.cc src/uia.cc
-  src/update.cc src/upgradenotification.cc src/utils.cc
+set(CHROME_PLUS_SOURCES
+  src/chrome++.cc
+  src/chrome++.rc
+  src/config.cc
+  src/hijack.cc
+  src/inputhook.cc
+  src/keymapping.cc
+  src/pakfile.cc
+  src/policies.cc
+  src/portable.cc
+  src/tabbookmark.cc
+  src/update.cc
+  src/upgradenotification.cc
+  src/utils.cc
 )
+
+if(CHROME_PLUS_TARGET_XP)
+  list(APPEND CHROME_PLUS_SOURCES
+    src/appid_xp.cc
+    src/green_xp.cc
+    src/hotkey_xp.cc
+    src/pakpatch_xp.cc
+    src/uia_xp.cc
+  )
+else()
+  list(APPEND CHROME_PLUS_SOURCES
+    src/appid.cc
+    src/green.cc
+    src/hotkey.cc
+    src/pakpatch.cc
+    src/uia.cc
+  )
+endif()
+
+add_library(chrome_plus SHARED ${CHROME_PLUS_SOURCES})
 
 if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
   set(CHROME_PLUS_VERSION_DEFINITIONS "RELEASE_VER_STR=\"${CHROME_PLUS_EFFECTIVE_BUILD_VERSION}\"")
@@ -124,25 +137,23 @@ if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
   target_compile_definitions(chrome_plus PRIVATE ${CHROME_PLUS_VERSION_DEFINITIONS})
 endif()
 
-# Classic XP system libraries. OneCore and propsys are not XP dependencies.
-target_link_libraries(chrome_plus PRIVATE
-  ole32 oleaut32 shell32 shlwapi psapi version
-  uiautomationcore
-  detours mini_gzip
-)
-
 if(CHROME_PLUS_TARGET_XP)
+  target_link_libraries(chrome_plus PRIVATE
+    ole32 oleaut32 shell32 shlwapi psapi version crypt32
+    detours mini_gzip
+  )
   target_link_options(chrome_plus PRIVATE
-    LINKER:/DELAYLOAD:uiautomationcore.dll
+    LINKER:/SUBSYSTEM:WINDOWS,5.01
     LINKER:/MANIFEST:NO
   )
-  if(CHROME_PLUS_ARCH STREQUAL "x86")
-    target_link_options(chrome_plus PRIVATE LINKER:/SUBSYSTEM:WINDOWS,5.01)
-  elseif(CHROME_PLUS_ARCH STREQUAL "x64")
-    target_link_options(chrome_plus PRIVATE LINKER:/SUBSYSTEM:WINDOWS,5.02)
-  endif()
 else()
-  target_link_options(chrome_plus PRIVATE LINKER:/DYNAMICBASE LINKER:/MANIFEST:NO)
+  target_link_libraries(chrome_plus PRIVATE
+    onecore propsys detours mini_gzip
+  )
+  target_link_options(chrome_plus PRIVATE
+    LINKER:/DYNAMICBASE
+    LINKER:/MANIFEST:NO
+  )
 endif()
 
 set_target_properties(chrome_plus PROPERTIES OUTPUT_NAME version)
@@ -157,15 +168,9 @@ if(CHROME_PLUS_USE_VC_LTL)
   )
   FetchContent_MakeAvailable(vc_ltl)
   set(VC_LTL_EnableCMakeInterface ON)
-  if(CHROME_PLUS_ARCH STREQUAL "x86")
-    set(LTLPlatform Win32)
-  else()
-    set(LTLPlatform "${CHROME_PLUS_ARCH}")
-  endif()
+  set(LTLPlatform Win32)
   if(CHROME_PLUS_TARGET_XP)
     set(WindowsTargetPlatformMinVersion 5.1.2600.0)
-  elseif(CHROME_PLUS_ARCH STREQUAL "arm64")
-    set(WindowsTargetPlatformMinVersion 10.0.10240.0)
   else()
     set(WindowsTargetPlatformMinVersion 6.0.6000.0)
   endif()
