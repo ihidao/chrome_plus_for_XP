@@ -1,23 +1,30 @@
 #ifndef CHROME_PLUS_SRC_UIA_H_
 #define CHROME_PLUS_SRC_UIA_H_
 
-#include <uiautomation.h>
-#include <wrl/client.h>
+#include <windows.h>
 
 #include <optional>
 #include <string>
 #include <vector>
 
+#ifdef CHROME_PLUS_TARGET_XP
+struct TabHitResult {
+  void* tab = nullptr;
+  int tab_count = 0;
+  bool on_close_button = false;
+};
+#else
+#include <uiautomation.h>
+#include <wrl/client.h>
 struct TabHitResult {
   Microsoft::WRL::ComPtr<IUIAutomationElement> tab;
   int tab_count = 0;
   bool on_close_button = false;
 };
+#endif
 
 [[nodiscard]] std::optional<TabHitResult>
 FindTabHitResult(POINT pt, bool need_count, bool need_close_button);
-// Deliberately not [[nodiscard]]: the caller has no fallback action;
-// failures are logged at the failure site.
 bool SelectTab(const TabHitResult& hit_result);
 [[nodiscard]] std::optional<int> FindTabCount(HWND hwnd);
 [[nodiscard]] bool IsOnTabBar(POINT pt);
