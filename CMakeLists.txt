@@ -93,6 +93,9 @@ if(CHROME_PLUS_TARGET_XP)
   if(NOT CHROME_PLUS_ARCH STREQUAL "x86")
     message(FATAL_ERROR "Windows XP target is supported only for x86.")
   endif()
+  # VC-LTL currently targets Vista for non-ARM64 builds; do not enable it
+  # for this XP profile until an XP-specific runtime configuration is added.
+  set(CHROME_PLUS_USE_VC_LTL OFF CACHE BOOL "Use VC-LTL" FORCE)
   add_compile_definitions(_WIN32_WINNT=0x0501 WINVER=0x0501 _WIN32_WINDOWS=0x0410)
 endif()
 
