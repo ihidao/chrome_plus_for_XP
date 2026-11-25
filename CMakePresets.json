@@ -5,25 +5,35 @@
       "name": "base",
       "hidden": true,
       "cacheVariables": {
-        "CHROME_PLUS_ARCH": "x64",
+        "CHROME_PLUS_ARCH": "x86",
+        "CHROME_PLUS_TARGET_XP": "ON",
         "CHROME_PLUS_USE_VC_LTL": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;MinSizeRel"
       }
     },
     {
       "name": "ninja",
-      "displayName": "Ninja Multi-Config with Clang-CL",
+      "displayName": "Ninja Multi-Config for Windows XP (x86)",
       "inherits": "base",
       "generator": "Ninja Multi-Config",
-      "binaryDir": "${sourceDir}/build/ninja-x64",
+      "binaryDir": "${sourceDir}/build/ninja-x86-xp",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl.cmake"
+    },
+    {
+      "name": "ninja-x64",
+      "displayName": "Ninja Multi-Config for Windows XP x64",
+      "inherits": "base",
+      "cacheVariables": { "CHROME_PLUS_ARCH": "x64" },
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/ninja-x64-xp",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl.cmake"
     },
     {
       "name": "vs",
-      "displayName": "Visual Studio with MSVC",
+      "displayName": "Visual Studio for Windows XP (x86)",
       "inherits": "base",
-      "binaryDir": "${sourceDir}/build/vs-x64",
-      "architecture": "x64"
+      "binaryDir": "${sourceDir}/build/vs-x86-xp",
+      "architecture": "Win32"
     }
   ]
 }
