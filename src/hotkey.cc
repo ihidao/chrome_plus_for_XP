@@ -1,3 +1,7 @@
+#if defined(CHROME_PLUS_TARGET_XP)
+// Windows XP has no Core Audio session APIs. Disable this Vista+ feature.
+void GetHotkey() {}
+#else
 #include "hotkey.h"
 
 #include <windows.h>
@@ -238,3 +242,5 @@ void GetHotkey() {
     Hotkey(boss_key, HideAndShow);
   }
 }
+
+#endif  // CHROME_PLUS_TARGET_XP
