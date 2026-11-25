@@ -1,3 +1,7 @@
+#if defined(CHROME_PLUS_TARGET_XP)
+// AppUserModelID, property-store and jump-list APIs require Vista+.
+void SetAppId() {}
+#else
 #include "appid.h"
 
 #include <windows.h>
@@ -429,3 +433,5 @@ void SetAppId() {
     DebugLog(L"SetAppId failed {}", status);
   }
 }
+
+#endif  // CHROME_PLUS_TARGET_XP
