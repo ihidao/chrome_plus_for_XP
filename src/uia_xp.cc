@@ -1,4 +1,5 @@
 #include "uia.h"
+
 #include <windows.h>
 
 std::optional<TabHitResult> FindTabHitResult(POINT, bool, bool) {
