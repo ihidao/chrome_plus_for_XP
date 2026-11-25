@@ -11,7 +11,12 @@
 
 namespace {
 
-auto RawUpdateProcThreadAttribute = UpdateProcThreadAttribute;
+using UpdateProcThreadAttributeFn = BOOL(WINAPI*)(
+    LPPROC_THREAD_ATTRIBUTE_LIST, DWORD, DWORD_PTR, PVOID, SIZE_T, PVOID,
+    PSIZE_T);
+UpdateProcThreadAttributeFn RawUpdateProcThreadAttribute =
+    reinterpret_cast<UpdateProcThreadAttributeFn>(GetProcAddress(
+        GetModuleHandleW(L"kernel32.dll"), "UpdateProcThreadAttribute"));
 auto RawCryptProtectData = CryptProtectData;
 auto RawCryptUnprotectData = CryptUnprotectData;
 auto RawGetVolumeInformationW = GetVolumeInformationW;
@@ -73,6 +78,10 @@ BOOL WINAPI MyUpdateProcThreadAttribute(
           PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_ALWAYS_ON);
     }
   }
+  if (!RawUpdateProcThreadAttribute) {
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+  }
   return RawUpdateProcThreadAttribute(lpAttributeList, dwFlags, Attribute,
                                       lpValue, cbSize, lpPreviousValue,
                                       lpReturnSize);
@@ -124,7 +133,9 @@ void MakeGreen() {
   // kernel32.dll
   DetourAttach(&RawGetComputerNameW, FakeGetComputerName);
   DetourAttach(&RawGetVolumeInformationW, FakeGetVolumeInformation);
-  DetourAttach(&RawUpdateProcThreadAttribute, MyUpdateProcThreadAttribute);
+  if (RawUpdateProcThreadAttribute) {
+    DetourAttach(&RawUpdateProcThreadAttribute, MyUpdateProcThreadAttribute);
+  }
 
   // components/os_crypt/os_crypt_win.cc
   // crypt32.dll
