@@ -1,6 +1,8 @@
 #ifndef CHROME_PLUS_SRC_UIA_H_
 #define CHROME_PLUS_SRC_UIA_H_
 
+#include <windows.h>
+
 #if !defined(CHROME_PLUS_TARGET_XP)
 #include <uiautomation.h>
 #include <wrl/client.h>
