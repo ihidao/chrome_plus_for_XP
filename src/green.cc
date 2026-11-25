@@ -67,6 +67,7 @@ BOOL WINAPI MyUpdateProcThreadAttribute(
     __in SIZE_T cbSize,
     __out_bcount_opt(cbSize) PVOID lpPreviousValue,
     __in_opt PSIZE_T lpReturnSize) {
+#if !defined(CHROME_PLUS_TARGET_XP)
   if (Attribute == PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY &&
       cbSize >= sizeof(DWORD64)) {
     // https://source.chromium.org/chromium/chromium/src/+/main:sandbox/win/src/process_mitigations.cc;l=362;drc=4c2fec5f6699ffeefd93137d2bf8c03504c6664c
@@ -78,6 +79,7 @@ BOOL WINAPI MyUpdateProcThreadAttribute(
           PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_ALWAYS_ON);
     }
   }
+#endif  // !CHROME_PLUS_TARGET_XP
   if (!RawUpdateProcThreadAttribute) {
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
