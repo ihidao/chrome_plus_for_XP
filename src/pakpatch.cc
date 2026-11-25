@@ -277,8 +277,18 @@ HANDLE WINAPI MyMapViewOfFile(_In_ HANDLE hFileMappingObject,
 // process already holds, which the sandbox permits -- it brokers new opens
 // (`NtCreateFile`/`NtOpenFile`), not operations on existing handles.
 // https://chromium.googlesource.com/chromium/src/+/main/docs/design/sandbox.md
+// Keep the Vista+ declarations local: XP-targeted Windows SDK headers
+// intentionally do not expose FILE_INFO_BY_HANDLE_CLASS / FILE_NAME_INFO.
+using FileInfoByHandleClassCompat = int;
+constexpr FileInfoByHandleClassCompat kFileNameInfoCompat = 2;
+
+struct FileNameInfoCompat {
+  DWORD FileNameLength;
+  WCHAR FileName[1];
+};
+
 using GetFileInformationByHandleExFn = BOOL(WINAPI*)(
-    HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID, DWORD);
+    HANDLE, FileInfoByHandleClassCompat, LPVOID, DWORD);
 
 bool IsResourcesPak(HANDLE hFile) {
   if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
@@ -292,10 +302,10 @@ bool IsResourcesPak(HANDLE hFile) {
   if (!get_file_info) {
     return false;
   }
-  alignas(FILE_NAME_INFO)
-      BYTE buffer[sizeof(FILE_NAME_INFO) + MAX_PATH * 2 * sizeof(wchar_t)];
-  auto* info = reinterpret_cast<FILE_NAME_INFO*>(buffer);
-  if (!get_file_info(hFile, FileNameInfo, info, sizeof(buffer))) {
+  alignas(FileNameInfoCompat)
+      BYTE buffer[sizeof(FileNameInfoCompat) + MAX_PATH * 2 * sizeof(wchar_t)];
+  auto* info = reinterpret_cast<FileNameInfoCompat*>(buffer);
+  if (!get_file_info(hFile, kFileNameInfoCompat, info, sizeof(buffer))) {
     return false;
   }
   std::wstring_view name(info->FileName,
