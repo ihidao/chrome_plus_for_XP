@@ -9,13 +9,13 @@ project(chrome_plus LANGUAGES C CXX RC)
 if(NOT WIN32)
   message(FATAL_ERROR "Chrome++ Next only supports Windows.")
 endif()
-
 if(NOT MSVC)
   message(FATAL_ERROR "Chrome++ Next requires an MSVC-compatible compiler frontend.")
 endif()
 
-option(CHROME_PLUS_TARGET_XP "Build the Windows XP x86-only variant" ON)
-set(CHROME_PLUS_ARCH x86)
+option(CHROME_PLUS_TARGET_XP "Build Windows XP x86 variant" ON)
+set(CHROME_PLUS_ARCH x86 CACHE STRING "Target architecture" FORCE)
+set_property(CACHE CHROME_PLUS_ARCH PROPERTY STRINGS x86)
 set(CMAKE_VS_PLATFORM_NAME "Win32")
 
 set(CMAKE_CXX_STANDARD 23)
@@ -28,13 +28,9 @@ set(CHROME_PLUS_EFFECTIVE_BUILD_VERSION "${CHROME_PLUS_BUILD_VERSION}")
 if(NOT CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
   find_package(Git QUIET)
   if(Git_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}" rev-parse --short=7 HEAD
-      RESULT_VARIABLE CHROME_PLUS_GIT_RESULT
-      OUTPUT_VARIABLE CHROME_PLUS_GIT_COMMIT
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}" rev-parse --short=7 HEAD
+      RESULT_VARIABLE CHROME_PLUS_GIT_RESULT OUTPUT_VARIABLE CHROME_PLUS_GIT_COMMIT
+      OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     if(CHROME_PLUS_GIT_RESULT EQUAL 0)
       set(CHROME_PLUS_EFFECTIVE_BUILD_VERSION "alpha-${CHROME_PLUS_GIT_COMMIT}")
     endif()
@@ -47,18 +43,11 @@ if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
   endif()
 endif()
 
-option(CHROME_PLUS_USE_VC_LTL "Use VC-LTL for the XP-compatible CRT/runtime" ON)
+option(CHROME_PLUS_USE_VC_LTL "Use VC-LTL for optimized configurations" ON)
 
 add_compile_definitions(UNICODE _UNICODE $<$<CONFIG:Debug>:_DEBUG>)
-
 if(CHROME_PLUS_TARGET_XP)
-  add_compile_definitions(
-    CHROME_PLUS_TARGET_XP=1
-    WINVER=0x0501
-    _WIN32_WINNT=0x0501
-    NTDDI_VERSION=0x05010000
-    GetTickCount64=GetTickCount
-  )
+  add_compile_definitions(CHROME_PLUS_TARGET_XP=1 WINVER=0x0501 _WIN32_WINNT=0x0501 NTDDI_VERSION=0x05010000)
 endif()
 
 add_compile_options(
@@ -67,13 +56,7 @@ add_compile_options(
   $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release,RelWithDebInfo,MinSizeRel>>:/EHs-c->
 )
 
-add_library(detours STATIC
-  detours/src/detours.cpp
-  detours/src/disasm.cpp
-  detours/src/image.cpp
-  detours/src/modules.cpp
-  detours/src/disolx86.cpp
-)
+add_library(detours STATIC detours/src/detours.cpp detours/src/disasm.cpp detours/src/image.cpp detours/src/modules.cpp detours/src/disolx86.cpp)
 target_include_directories(detours PUBLIC detours/src)
 target_compile_definitions(detours PRIVATE _X86_)
 target_compile_options(detours PRIVATE
@@ -90,36 +73,20 @@ target_compile_options(mini_gzip PRIVATE
 )
 
 set(CHROME_PLUS_SOURCES
-  src/chrome++.cc
-  src/chrome++.rc
-  src/config.cc
-  src/hijack.cc
-  src/inputhook.cc
-  src/keymapping.cc
-  src/pakfile.cc
-  src/policies.cc
-  src/portable.cc
-  src/tabbookmark.cc
-  src/update.cc
-  src/upgradenotification.cc
-  src/utils.cc
+  src/chrome++.cc src/chrome++.rc src/config.cc src/hijack.cc
+  src/inputhook.cc src/keymapping.cc src/pakfile.cc src/policies.cc
+  src/portable.cc src/tabbookmark.cc src/update.cc
+  src/upgradenotification.cc src/utils.cc
 )
 
 if(CHROME_PLUS_TARGET_XP)
   list(APPEND CHROME_PLUS_SOURCES
-    src/appid_xp.cc
-    src/green_xp.cc
-    src/hotkey_xp.cc
-    src/pakpatch_xp.cc
-    src/uia_xp.cc
+    src/appid_xp.cc src/green_xp.cc src/hotkey_xp.cc
+    src/pakpatch_xp.cc src/uia_xp.cc
   )
 else()
   list(APPEND CHROME_PLUS_SOURCES
-    src/appid.cc
-    src/green.cc
-    src/hotkey.cc
-    src/pakpatch.cc
-    src/uia.cc
+    src/appid.cc src/green.cc src/hotkey.cc src/pakpatch.cc src/uia.cc
   )
 endif()
 
@@ -138,22 +105,11 @@ if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
 endif()
 
 if(CHROME_PLUS_TARGET_XP)
-  target_link_libraries(chrome_plus PRIVATE
-    ole32 oleaut32 shell32 shlwapi psapi version crypt32
-    detours mini_gzip
-  )
-  target_link_options(chrome_plus PRIVATE
-    LINKER:/SUBSYSTEM:WINDOWS,5.01
-    LINKER:/MANIFEST:NO
-  )
+  target_link_libraries(chrome_plus PRIVATE ole32 oleaut32 shell32 shlwapi psapi version crypt32 detours mini_gzip)
+  target_link_options(chrome_plus PRIVATE LINKER:/SUBSYSTEM:WINDOWS,5.01 LINKER:/MANIFEST:NO)
 else()
-  target_link_libraries(chrome_plus PRIVATE
-    onecore propsys detours mini_gzip
-  )
-  target_link_options(chrome_plus PRIVATE
-    LINKER:/DYNAMICBASE
-    LINKER:/MANIFEST:NO
-  )
+  target_link_libraries(chrome_plus PRIVATE onecore propsys detours mini_gzip)
+  target_link_options(chrome_plus PRIVATE LINKER:/DYNAMICBASE LINKER:/MANIFEST:NO)
 endif()
 
 set_target_properties(chrome_plus PROPERTIES OUTPUT_NAME version)
@@ -169,11 +125,7 @@ if(CHROME_PLUS_USE_VC_LTL)
   FetchContent_MakeAvailable(vc_ltl)
   set(VC_LTL_EnableCMakeInterface ON)
   set(LTLPlatform Win32)
-  if(CHROME_PLUS_TARGET_XP)
-    set(WindowsTargetPlatformMinVersion 5.1.2600.0)
-  else()
-    set(WindowsTargetPlatformMinVersion 6.0.6000.0)
-  endif()
+  set(WindowsTargetPlatformMinVersion 5.1.2600.0)
   include("${vc_ltl_SOURCE_DIR}/VC-LTL helper for cmake.cmake")
   target_link_libraries(chrome_plus PRIVATE "$<$<CONFIG:Release,RelWithDebInfo,MinSizeRel>:VC_LTL>")
 endif()

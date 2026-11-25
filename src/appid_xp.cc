@@ -1,4 +1,5 @@
-#ifndef CHROME_PLUS_SRC_APPID_H_
-#define CHROME_PLUS_SRC_APPID_H_
-void SetAppId();
-#endif
+#include "appid.h"
+
+void SetAppId() {
+  // Windows XP has no AppUserModelID/taskbar jump-list API implementation.
+}
