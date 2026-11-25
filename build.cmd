@@ -2,7 +2,7 @@
 setlocal EnableExtensions DisableDelayedExpansion
 
 set "generator=ninja"
-set "architecture=x64"
+set "architecture=x86"
 set "configuration=MinSizeRel"
 set "mode=release"
 set "build_version="
@@ -15,8 +15,6 @@ if /i "%option:~0,8%"=="version=" goto use_version
 if /i "%~1"=="ninja" goto use_ninja
 if /i "%~1"=="vs" goto use_vs
 if /i "%~1"=="x86" goto use_x86
-if /i "%~1"=="x64" goto use_x64
-if /i "%~1"=="arm64" goto use_arm64
 if /i "%~1"=="debug" goto use_debug
 if /i "%~1"=="release" goto use_release
 if /i "%~1"=="help" goto help
@@ -38,16 +36,6 @@ goto parse
 
 :use_x86
 set "architecture=x86"
-shift
-goto parse
-
-:use_x64
-set "architecture=x64"
-shift
-goto parse
-
-:use_arm64
-set "architecture=arm64"
 shift
 goto parse
 
@@ -114,14 +102,15 @@ goto configure_vs
 
 :configure_ninja
 cmake --preset ninja -B "%build_dir%" ^
-  -DCHROME_PLUS_ARCH=%architecture% ^
+  -DCHROME_PLUS_ARCH=x86 ^
+  -DCHROME_PLUS_TARGET_XP=ON ^
   "-DCHROME_PLUS_BUILD_VERSION=%build_version%"
 goto configured
 
 :configure_vs
-call :set_vs_arch
-cmake --preset vs -B "%build_dir%" -A %vs_arch% ^
-  -DCHROME_PLUS_ARCH=%architecture% ^
+cmake --preset vs -B "%build_dir%" -A Win32 ^
+  -DCHROME_PLUS_ARCH=x86 ^
+  -DCHROME_PLUS_TARGET_XP=ON ^
   "-DCHROME_PLUS_BUILD_VERSION=%build_version%"
 
 :configured
@@ -137,6 +126,7 @@ cmake -E copy_if_different ^
   "%source_dir%src\chrome++.ini" ^
   "%output_dir%"
 if errorlevel 1 exit /b %errorlevel%
+
 if exist "%artifact_dir%\version.pdb" (
   cmake -E copy_if_different ^
     "%artifact_dir%\version.pdb" ^
@@ -160,11 +150,7 @@ set "PATH=%cmake_dir%;%PATH%"
 exit /b 0
 
 :prepare_ninja
-if "%architecture%"=="x86" set "vcvars_arch=amd64_x86"
-if "%architecture%"=="x64" set "vcvars_arch=amd64"
-if "%architecture%"=="arm64" set "vcvars_arch=amd64_arm64"
-
-call "%vs_dir%\VC\Auxiliary\Build\vcvarsall.bat" %vcvars_arch%
+call "%vs_dir%\VC\Auxiliary\Build\vcvarsall.bat" amd64_x86
 if errorlevel 1 exit /b %errorlevel%
 
 where ninja.exe >nul 2>nul
@@ -216,26 +202,19 @@ exit /b 0
 set "PATH=%vs_dir%\VC\Tools\Llvm\bin;%PATH%"
 exit /b 0
 
-:set_vs_arch
-if "%architecture%"=="x86" set "vs_arch=Win32"
-if "%architecture%"=="x64" set "vs_arch=x64"
-if "%architecture%"=="arm64" set "vs_arch=ARM64"
-exit /b 0
-
 :help
-echo Usage: build [ninja^|vs] [x86^|x64^|arm64] [debug^|release] [version=VALUE]
+echo Usage: build [ninja^|vs] [x86] [debug^|release] [version=VALUE]
 echo.
-echo Defaults: ninja x64 release
+echo Defaults: ninja x86 release
 echo.
 echo Examples:
 echo   build
 echo   build debug
-echo   build arm64 release
 echo   build vs
-echo   build vs x86 debug
+necho   build vs x86 debug
 echo   build version=1.19.0
 exit /b 0
 
 :help_error
-echo Usage: build [ninja^|vs] [x86^|x64^|arm64] [debug^|release] [version=VALUE]
+echo Usage: build [ninja^|vs] [x86] [debug^|release] [version=VALUE]
 exit /b 1
