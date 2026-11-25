@@ -84,6 +84,27 @@ if(CHROME_PLUS_EFFECTIVE_BUILD_VERSION)
 endif()
 
 option(
+  CHROME_PLUS_TARGET_XP
+  "Target Windows XP (32-bit only)"
+  OFF
+)
+
+if(CHROME_PLUS_TARGET_XP)
+  if(NOT CHROME_PLUS_ARCH STREQUAL "x86")
+    message(FATAL_ERROR "Windows XP target is supported only for x86.")
+  endif()
+  # VC-LTL currently targets Vista for non-ARM64 builds; do not enable it
+  # for this XP profile until an XP-specific runtime configuration is added.
+  set(CHROME_PLUS_USE_VC_LTL OFF CACHE BOOL "Use VC-LTL" FORCE)
+  add_compile_definitions(
+    CHROME_PLUS_TARGET_XP=1
+    _WIN32_WINNT=0x0501
+    WINVER=0x0501
+    _WIN32_WINDOWS=0x0410
+  )
+endif()
+
+option(
   CHROME_PLUS_USE_VC_LTL
   "Use VC-LTL for optimized configurations"
   OFF
@@ -196,6 +217,7 @@ target_link_libraries(chrome_plus PRIVATE
 target_link_options(chrome_plus PRIVATE
   LINKER:/DYNAMICBASE
   LINKER:/MANIFEST:NO
+  $<$<BOOL:${CHROME_PLUS_TARGET_XP}>:LINKER:/SUBSYSTEM:WINDOWS,5.01>
 )
 
 set_target_properties(chrome_plus PROPERTIES OUTPUT_NAME version)

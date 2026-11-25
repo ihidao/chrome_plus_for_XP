@@ -11,7 +11,12 @@
 
 namespace {
 
-auto RawUpdateProcThreadAttribute = UpdateProcThreadAttribute;
+using UpdateProcThreadAttributeFn = BOOL(WINAPI*)(
+    LPPROC_THREAD_ATTRIBUTE_LIST, DWORD, DWORD_PTR, PVOID, SIZE_T, PVOID,
+    PSIZE_T);
+UpdateProcThreadAttributeFn RawUpdateProcThreadAttribute =
+    reinterpret_cast<UpdateProcThreadAttributeFn>(GetProcAddress(
+        GetModuleHandleW(L"kernel32.dll"), "UpdateProcThreadAttribute"));
 auto RawCryptProtectData = CryptProtectData;
 auto RawCryptUnprotectData = CryptUnprotectData;
 auto RawGetVolumeInformationW = GetVolumeInformationW;
@@ -62,6 +67,7 @@ BOOL WINAPI MyUpdateProcThreadAttribute(
     __in SIZE_T cbSize,
     __out_bcount_opt(cbSize) PVOID lpPreviousValue,
     __in_opt PSIZE_T lpReturnSize) {
+#if !defined(CHROME_PLUS_TARGET_XP)
   if (Attribute == PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY &&
       cbSize >= sizeof(DWORD64)) {
     // https://source.chromium.org/chromium/chromium/src/+/main:sandbox/win/src/process_mitigations.cc;l=362;drc=4c2fec5f6699ffeefd93137d2bf8c03504c6664c
@@ -72,6 +78,11 @@ BOOL WINAPI MyUpdateProcThreadAttribute(
       *policy_value_1 &= ~static_cast<DWORD64>(
           PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_ALWAYS_ON);
     }
+  }
+#endif  // !CHROME_PLUS_TARGET_XP
+  if (!RawUpdateProcThreadAttribute) {
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
   }
   return RawUpdateProcThreadAttribute(lpAttributeList, dwFlags, Attribute,
                                       lpValue, cbSize, lpPreviousValue,
@@ -124,7 +135,9 @@ void MakeGreen() {
   // kernel32.dll
   DetourAttach(&RawGetComputerNameW, FakeGetComputerName);
   DetourAttach(&RawGetVolumeInformationW, FakeGetVolumeInformation);
-  DetourAttach(&RawUpdateProcThreadAttribute, MyUpdateProcThreadAttribute);
+  if (RawUpdateProcThreadAttribute) {
+    DetourAttach(&RawUpdateProcThreadAttribute, MyUpdateProcThreadAttribute);
+  }
 
   // components/os_crypt/os_crypt_win.cc
   // crypt32.dll

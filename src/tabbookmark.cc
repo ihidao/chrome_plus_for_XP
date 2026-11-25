@@ -51,11 +51,12 @@ bool IsNeedKeep(int tab_count, KeepTabTrigger trigger) {
   }
 
   bool keep_tab = (tab_count == 1);
-  static ULONGLONG
+  static DWORD
       last_closing_tab_ticks[static_cast<int>(KeepTabTrigger::kCount)] = {};
   const int trigger_index = static_cast<int>(trigger);
-  const ULONGLONG now = GetTickCount64();
-  const ULONGLONG tick = now - last_closing_tab_ticks[trigger_index];
+  const DWORD now = GetTickCount();
+  // Unsigned subtraction remains correct across GetTickCount's 32-bit wrap.
+  const DWORD tick = now - last_closing_tab_ticks[trigger_index];
   last_closing_tab_ticks[trigger_index] = now;
   if (tick > 50 && tick <= 250 && tab_count == 2) {
     keep_tab = true;

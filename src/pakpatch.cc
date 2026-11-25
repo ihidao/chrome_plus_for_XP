@@ -277,15 +277,25 @@ HANDLE WINAPI MyMapViewOfFile(_In_ HANDLE hFileMappingObject,
 // process already holds, which the sandbox permits -- it brokers new opens
 // (`NtCreateFile`/`NtOpenFile`), not operations on existing handles.
 // https://chromium.googlesource.com/chromium/src/+/main/docs/design/sandbox.md
+using GetFileInformationByHandleExFn = BOOL(WINAPI*)(
+    HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID, DWORD);
+
 bool IsResourcesPak(HANDLE hFile) {
   if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  // FileNameInfo was added in Vista. Resolve it dynamically; on XP this
+  // feature is skipped rather than leaving an unsupported static import.
+  static const auto get_file_info =
+      reinterpret_cast<GetFileInformationByHandleExFn>(GetProcAddress(
+          GetModuleHandleW(L"kernel32.dll"), "GetFileInformationByHandleEx"));
+  if (!get_file_info) {
     return false;
   }
   alignas(FILE_NAME_INFO)
       BYTE buffer[sizeof(FILE_NAME_INFO) + MAX_PATH * 2 * sizeof(wchar_t)];
   auto* info = reinterpret_cast<FILE_NAME_INFO*>(buffer);
-  if (!GetFileInformationByHandleEx(hFile, FileNameInfo, info,
-                                    sizeof(buffer))) {
+  if (!get_file_info(hFile, FileNameInfo, info, sizeof(buffer))) {
     return false;
   }
   std::wstring_view name(info->FileName,

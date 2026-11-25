@@ -1,3 +1,14 @@
+#if defined(CHROME_PLUS_TARGET_XP)
+#include "uia.h"
+
+std::optional<TabHitResult> FindTabHitResult(POINT, bool, bool) { return std::nullopt; }
+bool SelectTab(const TabHitResult&) { return false; }
+std::optional<int> FindTabCount(HWND) { return std::nullopt; }
+bool IsOnTabBar(POINT) { return false; }
+bool IsOnBookmark(POINT) { return false; }
+bool IsOmniboxFocused() { return false; }
+bool IsOnNewTab(HWND, const std::vector<std::wstring>&) { return false; }
+#else
 #include "uia.h"
 
 #include <uiautomation.h>
@@ -71,7 +82,7 @@ struct TabUiCache {
   bool fullscreen = false;
   // Windows without tab UI (popups, app windows) would re-run the resolve on
   // every click; remember the failure and retry at most once a second.
-  ULONGLONG retry_after_ticks = 0;
+  DWORD retry_after_ticks = 0;
   // Null when the container came from the fullscreen raw-view fallback (the
   // control view hides the tab strip region there).
   ComPtr<IUIAutomationElement> region;
@@ -693,7 +704,7 @@ TabUiCache* ResolveTabUi(UiaSession* session, HWND hwnd) {
     if (cache.container.element) {
       return &cache;
     }
-    if (GetTickCount64() < cache.retry_after_ticks) {
+    if (static_cast<LONG>(GetTickCount() - cache.retry_after_ticks) < 0) {
       return nullptr;
     }
   }
@@ -701,7 +712,7 @@ TabUiCache* ResolveTabUi(UiaSession* session, HWND hwnd) {
   cache = TabUiCache();
   cache.window = hwnd;
   cache.fullscreen = fullscreen;
-  cache.retry_after_ticks = GetTickCount64() + 1000;
+  cache.retry_after_ticks = GetTickCount() + 1000;
 
   const auto window_element = GetElementFromWindow(*session, hwnd);
   if (!window_element) {
@@ -1311,3 +1322,5 @@ bool IsOnNewTab(HWND hwnd, const std::vector<std::wstring>& extra_tab_names) {
 
   return false;
 }
+
+#endif  // CHROME_PLUS_TARGET_XP
