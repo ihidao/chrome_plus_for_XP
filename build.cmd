@@ -115,7 +115,8 @@ goto configure_vs
 :configure_ninja
 cmake --preset ninja -B "%build_dir%" ^
   -DCHROME_PLUS_ARCH=%architecture% ^
-  "-DCHROME_PLUS_BUILD_VERSION=%build_version%"
+  "-DCHROME_PLUS_BUILD_VERSION=%build_version%" ^
+  -DCHROME_PLUS_TARGET_XP=%CHROME_PLUS_TARGET_XP%
 goto configured
 
 :configure_vs
