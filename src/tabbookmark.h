@@ -1,6 +1,0 @@
-#ifndef CHROME_PLUS_SRC_TABBOOKMARK_H_
-#define CHROME_PLUS_SRC_TABBOOKMARK_H_
-
-void TabBookmark();
-
-#endif  // CHROME_PLUS_SRC_TABBOOKMARK_H_
