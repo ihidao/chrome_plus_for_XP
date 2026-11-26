@@ -97,13 +97,14 @@ EXTERNC BOOL WINAPI DllMain(HINSTANCE hModule, DWORD dwReason, LPVOID pv)
         DisableThreadLibraryCalls(hModule);
         hInstance = hModule;
 
-        // 保持系统dll原有功能
-        LoadSysDll(hModule);
-
-        // 初始化HOOK库成功以后安装加载器
+        // MinHook 必须先初始化，再转接本地代理 DLL 的导出函数。
         MH_STATUS status = MH_Initialize();
         if (status == MH_OK)
         {
+            // 保持系统 version.dll 的原有功能。
+            LoadSysDll(hModule);
+
+            // 安装程序入口加载器。
             InstallLoader();
         }
         else
