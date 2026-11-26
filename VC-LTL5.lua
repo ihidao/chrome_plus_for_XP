@@ -14,7 +14,8 @@ target("VC-LTL-5")
         end
         local VC_LTL_Root = find_in_file() or find_in_reg()
         if not VC_LTL_Root or #VC_LTL_Root == 0 then
-            raise("VC-LTL was not found. Install the VC-LTL NuGet package.")
+            cprint("VC-LTL was not found. Install the VC-LTL NuGet package.")
+            return
         end
         local WindowsTargetPlatformMinVersion = "5.1.2600.0"
         cprint("VC-LTL Path : %s", VC_LTL_Root)
