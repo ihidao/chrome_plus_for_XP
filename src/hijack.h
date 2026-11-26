@@ -1,6 +1,7 @@
 ﻿#include <windows.h>
 #include <intrin.h>
 #include <stdint.h>
+#include "MinHook.h"
 
 namespace hijack
 {
@@ -65,85 +66,73 @@ EXPORT(VerQueryValueW)
 } // namespace hijack
 #pragma endregion
 
-#pragma region 还原导出函数
-bool WriteMemory(PBYTE BaseAddress, PBYTE Buffer, DWORD nSize)
-{
-    DWORD ProtectFlag = 0;
-    if (VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, PAGE_EXECUTE_READWRITE, &ProtectFlag))
-    {
-        memcpy(BaseAddress, Buffer, nSize);
-        FlushInstructionCache(GetCurrentProcess(), BaseAddress, nSize);
-        VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, ProtectFlag, &ProtectFlag);
-        return true;
-    }
-    return false;
-}
-
-// 还原导出函数
-void InstallJMP(PBYTE BaseAddress, uintptr_t Function)
-{
-    if (*BaseAddress == 0xE9)
-    {
-        BaseAddress++;
-        BaseAddress = BaseAddress + *(uint32_t *)BaseAddress + 4;
-    }
-#ifdef _WIN64
-    BYTE move[] = {0x48, 0xB8}; // move rax,xxL);
-    BYTE jump[] = {0xFF, 0xE0}; // jmp rax
-
-    WriteMemory(BaseAddress, move, sizeof(move));
-    BaseAddress += sizeof(move);
-
-    WriteMemory(BaseAddress, (PBYTE)&Function, sizeof(uintptr_t));
-    BaseAddress += sizeof(uintptr_t);
-
-    WriteMemory(BaseAddress, jump, sizeof(jump));
-#else
-    BYTE jump[] = {0xE9};
-    WriteMemory(BaseAddress, jump, sizeof(jump));
-    BaseAddress += sizeof(jump);
-
-    uintptr_t offset = Function - (uintptr_t)BaseAddress - 4;
-    WriteMemory(BaseAddress, (PBYTE)&offset, sizeof(offset));
-#endif // _WIN64
-}
-#pragma endregion
-
-#pragma region 加载系统dll
+// 使用 MinHook 将本地代理导出函数转接到系统 version.dll。
+// 目标函数是本 DLL 中的 NOP 占位导出；跳转目标是系统 DLL 的真实实现。
 void LoadVersion(HINSTANCE hModule)
 {
-    PBYTE pImageBase = (PBYTE)hModule;
-    PIMAGE_DOS_HEADER pimDH = (PIMAGE_DOS_HEADER)pImageBase;
-    if (pimDH->e_magic == IMAGE_DOS_SIGNATURE)
+    if (!hModule)
+        return;
+
+    PBYTE imageBase = (PBYTE)hModule;
+    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)imageBase;
+    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+        return;
+
+    PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)(imageBase + dosHeader->e_lfanew);
+    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE)
+        return;
+
+    IMAGE_DATA_DIRECTORY exportData =
+        ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!exportData.VirtualAddress || !exportData.Size)
+        return;
+
+    PIMAGE_EXPORT_DIRECTORY exports =
+        (PIMAGE_EXPORT_DIRECTORY)(imageBase + exportData.VirtualAddress);
+    DWORD* names = (DWORD*)(imageBase + exports->AddressOfNames);
+    DWORD* functions = (DWORD*)(imageBase + exports->AddressOfFunctions);
+    WORD* ordinals = (WORD*)(imageBase + exports->AddressOfNameOrdinals);
+
+    wchar_t systemDirectory[MAX_PATH + 1] = { 0 };
+    UINT systemLength = GetSystemDirectoryW(systemDirectory, MAX_PATH);
+    if (!systemLength || systemLength >= MAX_PATH)
+        return;
+
+    wchar_t systemDllPath[MAX_PATH + 16] = { 0 };
+    lstrcpyW(systemDllPath, systemDirectory);
+    lstrcatW(systemDllPath, L"\\version.dll");
+
+    // 使用绝对系统路径，避免再次加载当前目录中的代理 DLL。
+    HMODULE systemDll = LoadLibraryW(systemDllPath);
+    if (!systemDll)
+        return;
+
+    for (DWORD i = 0; i < exports->NumberOfNames; ++i)
     {
-        PIMAGE_NT_HEADERS pimNH = (PIMAGE_NT_HEADERS)(pImageBase + pimDH->e_lfanew);
-        if (pimNH->Signature == IMAGE_NT_SIGNATURE)
+        WORD ordinalIndex = ordinals[i];
+        if (ordinalIndex >= exports->NumberOfFunctions)
+            continue;
+
+        PBYTE localFunction = imageBase + functions[ordinalIndex];
+        FARPROC systemFunction = GetProcAddress(
+            systemDll, (LPCSTR)(imageBase + names[i]));
+        if (!localFunction || !systemFunction)
+            continue;
+
+        LPVOID originalFunction = NULL;
+        MH_STATUS status = MH_CreateHook(
+            localFunction, (LPVOID)systemFunction, &originalFunction);
+        if (status == MH_OK)
+            status = MH_EnableHook(localFunction);
+
+        if (status != MH_OK && status != MH_ERROR_ENABLED)
         {
-            PIMAGE_EXPORT_DIRECTORY pimExD = (PIMAGE_EXPORT_DIRECTORY)(pImageBase + pimNH->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-            DWORD *pName = (DWORD *)(pImageBase + pimExD->AddressOfNames);
-            DWORD *pFunction = (DWORD *)(pImageBase + pimExD->AddressOfFunctions);
-            WORD *pNameOrdinals = (WORD *)(pImageBase + pimExD->AddressOfNameOrdinals);
-
-            wchar_t szSysDirectory[MAX_PATH + 1];
-            GetSystemDirectory(szSysDirectory, MAX_PATH);
-
-            wchar_t szDLLPath[MAX_PATH + 1];
-            lstrcpy(szDLLPath, szSysDirectory);
-            lstrcat(szDLLPath, TEXT("\\version.dll"));
-
-            HINSTANCE module = LoadLibrary(szDLLPath);
-            for (size_t i = 0; i < pimExD->NumberOfNames; i++)
-            {
-                uintptr_t Original = (uintptr_t)GetProcAddress(module, (char *)(pImageBase + pName[i]));
-                if (Original)
-                {
-                    InstallJMP(pImageBase + pFunction[pNameOrdinals[i]], Original);
-                }
-            }
+            char message[160] = { 0 };
+            wsprintfA(message, "[chrome++] version.dll export hook failed: %d\r\n", status);
+            OutputDebugStringA(message);
         }
     }
 }
-#pragma endregion
 
 void LoadSysDll(HINSTANCE hModule)
 {
