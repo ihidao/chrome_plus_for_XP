@@ -53,6 +53,8 @@ public:
 
     T *operator->() const { return ptr_; }
     operator bool() const { return ptr_ != NULL; }
+    bool operator==(T *ptr) const { return ptr_ == ptr; }
+    bool operator!=(T *ptr) const { return ptr_ != ptr; }
     T *Get() const { return ptr_; }
 
     // For COM methods that return a new reference through T**.
@@ -159,7 +161,7 @@ void TraversalRawAccessible(NodePtr node, Function f)
             {
                 if (varChildren[i].vt == VT_DISPATCH)
                 {
-                    Microsoft::WRL::ComPtr<IDispatch> dispatch = varChildren[i].pdispVal;
+                    XPComPtr<IDispatch> dispatch = varChildren[i].pdispVal;
                     NodePtr child = nullptr;
                     if (S_OK == dispatch->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(child.GetAddressOf())))
                     {
@@ -223,8 +225,8 @@ NodePtr FindPageTab(NodePtr node)
 NodePtr GetParentElement(NodePtr child)
 {
     NodePtr element = nullptr;
-    Microsoft::WRL::ComPtr<IDispatch> dispatch = nullptr;
-    if (S_OK == child->get_accParent(&dispatch) && dispatch)
+    XPComPtr<IDispatch> dispatch = nullptr;
+    if (S_OK == child->get_accParent(dispatch.GetAddressOf()) && dispatch)
     {
         NodePtr parent = nullptr;
         if (S_OK == dispatch->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(parent.GetAddressOf())))
