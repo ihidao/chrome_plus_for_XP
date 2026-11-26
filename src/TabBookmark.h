@@ -161,7 +161,7 @@ void TraversalRawAccessible(NodePtr node, Function f)
                 {
                     Microsoft::WRL::ComPtr<IDispatch> dispatch = varChildren[i].pdispVal;
                     NodePtr child = nullptr;
-                    if (S_OK == dispatch->QueryInterface(IID_IAccessible, (void **)&child))
+                    if (S_OK == dispatch->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(child.GetAddressOf())))
                     {
                         // if ((GetAccessibleState(child) & STATE_SYSTEM_INVISIBLE) == 0) // 只遍历可见节点
                         {
