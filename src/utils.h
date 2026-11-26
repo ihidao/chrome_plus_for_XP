@@ -297,15 +297,22 @@ bool ReplaceStringInPlace(std::string &subject, const std::string &search, const
     }
     return find;
 }
-// bool WriteMemory(PBYTE BaseAddress, PBYTE Buffer, DWORD nSize)
-//{
-//     DWORD ProtectFlag = 0;
-//     if (VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, PAGE_EXECUTE_READWRITE, &ProtectFlag))
-//     {
-//         memcpy(BaseAddress, Buffer, nSize);
-//         FlushInstructionCache(GetCurrentProcess(), BaseAddress, nSize);
-//         VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, ProtectFlag, &ProtectFlag);
-//         return true;
-//     }
-//     return false;
-// }
+// 修改当前进程中的代码页保护属性并写入补丁字节。
+// VirtualProtectEx、FlushInstructionCache 均兼容 Windows XP。
+bool WriteMemory(PBYTE BaseAddress, PBYTE Buffer, DWORD nSize)
+{
+    if (!BaseAddress || !Buffer || nSize == 0)
+        return false;
+
+    DWORD oldProtect = 0;
+    if (!VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize,
+                          PAGE_EXECUTE_READWRITE, &oldProtect))
+        return false;
+
+    memcpy(BaseAddress, Buffer, nSize);
+    FlushInstructionCache(GetCurrentProcess(), BaseAddress, nSize);
+
+    DWORD ignored = 0;
+    VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, oldProtect, &ignored);
+    return true;
+}
