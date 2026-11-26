@@ -1,11 +1,11 @@
 includes("VC-LTL5.lua")
 
 add_rules("mode.debug", "mode.release")
-
 set_warnings("more")
 
 add_defines("WIN32", "_WIN32")
 add_defines("UNICODE", "_UNICODE", "_CRT_SECURE_NO_WARNINGS", "_CRT_NONSTDC_NO_DEPRECATE")
+add_defines("WINVER=0x0501", "_WIN32_WINNT=0x0501", "_WIN32_IE=0x0600")
 
 if is_mode("release") then
     add_defines("NDEBUG")
@@ -14,9 +14,8 @@ if is_mode("release") then
 end
 
 add_cxflags("/utf-8")
-
 add_links("gdiplus", "kernel32", "user32", "gdi32", "winspool", "comdlg32")
-add_links("advapi32", "shell32", "ole32", "oleaut32", "uuid", "odbc32", "odbccp32")
+add_links("advapi32", "shell32", "ole32", "oleaut32", "uuid", "odbc32", "odbccp32", "shlwapi", "oleacc", "crypt32", "netapi32")
 
 target("minhook")
     set_kind("static")
