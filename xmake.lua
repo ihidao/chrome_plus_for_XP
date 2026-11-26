@@ -9,7 +9,8 @@ add_defines("WINVER=0x0501", "_WIN32_WINNT=0x0501", "_WIN32_IE=0x0600")
 
 if is_mode("release") then
     add_defines("NDEBUG")
-    add_cxflags("/O2", "/Os", "/Gy", "/MT", "/EHsc", "/fp:precise")
+    set_runtimes("MT")
+    add_cxflags("/O2", "/Os", "/Gy", "/EHsc", "/fp:precise")
     add_ldflags("/DYNAMICBASE", "/LTCG")
 end
 
