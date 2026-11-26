@@ -10,7 +10,7 @@ target("VC-LTL-5")
             end
         end
         local function find_in_reg()
-            return vformat("$(reg HKEY_CURRENT_USER\Code\VC-LTL;Root)")
+            return vformat("$(reg HKEY_CURRENT_USER\\Code\\VC-LTL;Root)")
         end
         local VC_LTL_Root = find_in_file() or find_in_reg()
         if not VC_LTL_Root or #VC_LTL_Root == 0 then
