@@ -1,5 +1,24 @@
 typedef LONG NTSTATUS, *PNTSTATUS;
 
+// patch.h 独立使用的内存写入函数，避免依赖 hijack.h 中的旧实现。
+static bool PatchWriteMemory(PBYTE BaseAddress, const BYTE *Buffer, DWORD nSize)
+{
+    if (!BaseAddress || !Buffer || nSize == 0)
+        return false;
+
+    DWORD oldProtect = 0;
+    if (!VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize,
+                          PAGE_EXECUTE_READWRITE, &oldProtect))
+        return false;
+
+    memcpy(BaseAddress, Buffer, nSize);
+    FlushInstructionCache(GetCurrentProcess(), BaseAddress, nSize);
+
+    DWORD ignored = 0;
+    VirtualProtectEx(GetCurrentProcess(), BaseAddress, nSize, oldProtect, &ignored);
+    return true;
+}
+
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(x) ((x) >= 0)
 #define STATUS_SUCCESS ((NTSTATUS)0)
@@ -32,7 +51,7 @@ void Outdated(HMODULE module)
         if (*(match + 0xF) == 0x74)
         {
             BYTE patch[] = {0x90, 0x90};
-            WriteMemory(match + 0xF, patch, sizeof(patch));
+            PatchWriteMemory(match + 0xF, patch, sizeof(patch));
         }
     }
     else
