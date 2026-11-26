@@ -2,11 +2,77 @@
 #pragma comment(lib, "oleacc.lib")
 
 #include <thread>
-#include <wrl/client.h>
+
+// Minimal COM smart pointer. Avoid WRL because the Windows SDK's WRL
+// headers require Vista or later, while this DLL must remain XP-targeted.
+template <typename T>
+class XPComPtr
+{
+public:
+    XPComPtr(T *ptr = NULL) : ptr_(ptr)
+    {
+        if (ptr_)
+            ptr_->AddRef();
+    }
+
+    XPComPtr(const XPComPtr &other) : ptr_(other.ptr_)
+    {
+        if (ptr_)
+            ptr_->AddRef();
+    }
+
+    ~XPComPtr()
+    {
+        if (ptr_)
+            ptr_->Release();
+    }
+
+    XPComPtr &operator=(const XPComPtr &other)
+    {
+        if (this != &other)
+        {
+            T *next = other.ptr_;
+            if (next)
+                next->AddRef();
+            if (ptr_)
+                ptr_->Release();
+            ptr_ = next;
+        }
+        return *this;
+    }
+
+    XPComPtr &operator=(T *ptr)
+    {
+        if (ptr)
+            ptr->AddRef();
+        if (ptr_)
+            ptr_->Release();
+        ptr_ = ptr;
+        return *this;
+    }
+
+    T *operator->() const { return ptr_; }
+    operator bool() const { return ptr_ != NULL; }
+    T *Get() const { return ptr_; }
+
+    // For COM methods that return a new reference through T**.
+    T **GetAddressOf()
+    {
+        if (ptr_)
+        {
+            ptr_->Release();
+            ptr_ = NULL;
+        }
+        return &ptr_;
+    }
+
+private:
+    T *ptr_;
+};
 
 HHOOK mouse_hook = NULL;
 
-using NodePtr = Microsoft::WRL::ComPtr<IAccessible>;
+using NodePtr = XPComPtr<IAccessible>;
 
 #define KEY_PRESSED 0x8000
 bool IsPressed(int key)
@@ -61,9 +127,9 @@ void TraversalAccessible(NodePtr node, Function f)
             {
                 if (varChildren[i].vt == VT_DISPATCH)
                 {
-                    Microsoft::WRL::ComPtr<IDispatch> dispatch = varChildren[i].pdispVal;
+                    XPComPtr<IDispatch> dispatch = varChildren[i].pdispVal;
                     NodePtr child = nullptr;
-                    if (S_OK == dispatch->QueryInterface(IID_IAccessible, (void **)&child))
+                    if (S_OK == dispatch->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(child.GetAddressOf())))
                     {
                         if ((GetAccessibleState(child) & STATE_SYSTEM_INVISIBLE) == 0) // 只遍历可见节点
                         {
@@ -161,7 +227,7 @@ NodePtr GetParentElement(NodePtr child)
     if (S_OK == child->get_accParent(&dispatch) && dispatch)
     {
         NodePtr parent = nullptr;
-        if (S_OK == dispatch->QueryInterface(IID_IAccessible, (void **)&parent))
+        if (S_OK == dispatch->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(parent.GetAddressOf())))
         {
             element = parent;
         }
@@ -176,7 +242,7 @@ NodePtr GetTopContainerView(HWND hwnd)
     if (GetClassName(hwnd, name, MAX_PATH) && wcscmp(name, L"Chrome_WidgetWin_1") == 0)
     {
         NodePtr paccMainWindow = nullptr;
-        if (S_OK == AccessibleObjectFromWindow(hwnd, OBJID_WINDOW, IID_PPV_ARGS(&paccMainWindow)))
+        if (S_OK == AccessibleObjectFromWindow(hwnd, OBJID_WINDOW, __uuidof(IAccessible), reinterpret_cast<void **>(paccMainWindow.GetAddressOf())))
         {
             NodePtr PageTabList = FindPageTabList(paccMainWindow);
             if (PageTabList)
