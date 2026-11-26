@@ -1,30 +1,50 @@
-std::wstring QuoteSpaceIfNeeded(const std::wstring &str)
-{
-    if (str.find(L' ') == std::wstring::npos)
-        return std::move(str);
+#pragma once
 
-    std::wstring escaped(L"\"");
-    for (auto c : str)
+#include <shellapi.h>
+#include <shlwapi.h>
+#include <string>
+#include <vector>
+
+// Quote one Windows command-line argument using CommandLineToArgvW-compatible rules.
+std::wstring QuoteSpaceIfNeeded(const std::wstring &arg)
+{
+    if (!arg.empty() && arg.find_first_of(L" \t\n\v\"") == std::wstring::npos)
+        return arg;
+
+    std::wstring result = L"\"";
+    size_t backslashes = 0;
+    for (wchar_t ch : arg)
     {
-        if (c == L'"')
-            escaped += L'"';
-        escaped += c;
+        if (ch == L'\\')
+        {
+            ++backslashes;
+        }
+        else if (ch == L'"')
+        {
+            result.append(backslashes * 2 + 1, L'\\');
+            result += L'"';
+            backslashes = 0;
+        }
+        else
+        {
+            result.append(backslashes, L'\\');
+            result += ch;
+            backslashes = 0;
+        }
     }
-    escaped += L'"';
-    return std::move(escaped);
+    result.append(backslashes * 2, L'\\');
+    result += L'"';
+    return result;
 }
 
-std::wstring JoinArgsString(std::vector<std::wstring> lines, const std::wstring &delimiter)
+std::wstring JoinArgsString(const std::vector<std::wstring> &args, const std::wstring &delimiter)
 {
     std::wstring text;
-    bool first = true;
-    for (auto &line : lines)
+    for (size_t i = 0; i < args.size(); ++i)
     {
-        if (!first)
+        if (i)
             text += delimiter;
-        else
-            first = false;
-        text += QuoteSpaceIfNeeded(line);
+        text += QuoteSpaceIfNeeded(args[i]);
     }
     return text;
 }
@@ -32,11 +52,7 @@ std::wstring JoinArgsString(std::vector<std::wstring> lines, const std::wstring 
 bool IsExistsPortable()
 {
     std::wstring path = GetAppDir() + L"\\portable";
-    if (PathFileExists(path.data()))
-    {
-        return true;
-    }
-    return false;
+    return PathFileExistsW(path.c_str()) != FALSE;
 }
 
 bool IsNeedPortable()
@@ -49,98 +65,118 @@ bool IsNeedPortable()
 std::wstring GetUserDataDir()
 {
     std::wstring path = GetAppDir() + L"\\..\\Data";
-
-    TCHAR temp[MAX_PATH];
-    ::PathCanonicalize(temp, path.data());
-
+    wchar_t temp[MAX_PATH] = {0};
+    if (!PathCanonicalizeW(temp, path.c_str()))
+        return path;
     return temp;
 }
+
 std::wstring GetDiskCacheDir()
 {
     std::wstring path = GetAppDir() + L"\\..\\Cache";
-
-    TCHAR temp[MAX_PATH];
-    ::PathCanonicalize(temp, path.data());
-
+    wchar_t temp[MAX_PATH] = {0};
+    if (!PathCanonicalizeW(temp, path.c_str()))
+        return path;
     return temp;
 }
 
-// 构造新命令行
+static bool HasSwitch(const std::vector<std::wstring> &args, const wchar_t *name)
+{
+    const size_t length = wcslen(name);
+    for (const auto &arg : args)
+    {
+        if (_wcsnicmp(arg.c_str(), name, length) == 0 &&
+            (arg.length() == length || arg[length] == L'='))
+            return true;
+    }
+    return false;
+}
+
+// Build the relaunch command line. argv[0] is passed separately as lpFile.
 std::wstring GetCommand(LPWSTR param)
 {
-    std::vector<std::wstring> args;
-
-    int argc;
+    int argc = 0;
     LPWSTR *argv = CommandLineToArgvW(param, &argc);
-
-    int insert_pos = 0;
-    for (int i = 0; i < argc; i++)
+    if (!argv || argc <= 0)
     {
-        if (wcscmp(argv[i], L"--") == 0)
-        {
-            break;
-        }
-        if (wcscmp(argv[i], L"--single-argument") == 0)
-        {
-            break;
-        }
-        insert_pos = i;
+        if (argv)
+            LocalFree(argv);
+        return L"";
     }
-    for (int i = 0; i < argc; i++)
+
+    std::vector<std::wstring> args;
+    std::vector<std::wstring> trailing;
+    bool after_separator = false;
+    for (int i = 1; i < argc; ++i)
     {
-        // 保留原来参数
-        if (i)
-            args.push_back(argv[i]);
-
-        // 追加参数
-        if (i == insert_pos)
+        if (!after_separator && wcscmp(argv[i], L"--") == 0)
         {
-            args.push_back(L"--shuax");
-
-            // args.push_back(L"--force-local-ntp");
-            // args.push_back(L"--disable-background-networking");
-
-            args.push_back(L"--disable-features=RendererCodeIntegrity,FlashDeprecationWarning");
-
-            // if (IsNeedPortable())
-            {
-                auto diskcache = GetDiskCacheDir();
-
-                wchar_t temp[MAX_PATH];
-                wsprintf(temp, L"--disk-cache-dir=%s", diskcache.c_str());
-                args.push_back(temp);
-            }
-            {
-                auto userdata = GetUserDataDir();
-
-                wchar_t temp[MAX_PATH];
-                wsprintf(temp, L"--user-data-dir=%s", userdata.c_str());
-                args.push_back(temp);
-            }
+            after_separator = true;
+            continue;
         }
+        (after_separator ? trailing : args).push_back(argv[i]);
     }
     LocalFree(argv);
 
+    if (!HasSwitch(args, L"--shuax"))
+        args.push_back(L"--shuax");
+    if (!HasSwitch(args, L"--disable-features"))
+        args.push_back(L"--disable-features=RendererCodeIntegrity,FlashDeprecationWarning");
+    if (!HasSwitch(args, L"--disk-cache-dir"))
+        args.push_back(L"--disk-cache-dir=" + GetDiskCacheDir());
+    if (!HasSwitch(args, L"--user-data-dir"))
+        args.push_back(L"--user-data-dir=" + GetUserDataDir());
+
+    if (!trailing.empty())
+    {
+        args.push_back(L"--");
+        args.insert(args.end(), trailing.begin(), trailing.end());
+    }
     return JoinArgsString(args, L" ");
 }
 
 void Portable(LPWSTR param)
 {
-    wchar_t path[MAX_PATH];
-    ::GetModuleFileName(NULL, path, MAX_PATH);
+    wchar_t path[MAX_PATH] = {0};
+    DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
+    if (!length || length >= MAX_PATH)
+    {
+        DebugLog(L"Portable: GetModuleFileName failed, error=%lu", GetLastError());
+        return;
+    }
 
     std::wstring args = GetCommand(param);
+    if (args.empty())
+    {
+        DebugLog(L"Portable: failed to construct command line");
+        return;
+    }
 
-    SHELLEXECUTEINFO sei = {0};
-    sei.cbSize = sizeof(SHELLEXECUTEINFO);
+    wchar_t app_dir[MAX_PATH] = {0};
+    lstrcpynW(app_dir, path, MAX_PATH);
+    if (!PathRemoveFileSpecW(app_dir))
+    {
+        DebugLog(L"Portable: PathRemoveFileSpec failed");
+        return;
+    }
+
+    SHELLEXECUTEINFOW sei = {0};
+    sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
     sei.lpVerb = L"open";
     sei.lpFile = path;
+    sei.lpParameters = args.c_str();
+    sei.lpDirectory = app_dir;
     sei.nShow = SW_SHOWNORMAL;
 
-    sei.lpParameters = args.c_str();
-    if (ShellExecuteEx(&sei))
+    if (ShellExecuteExW(&sei))
     {
+        DebugLog(L"Portable: relaunched with command line: %s", args.c_str());
+        if (sei.hProcess)
+            CloseHandle(sei.hProcess);
         ExitProcess(0);
     }
+
+    DebugLog(L"Portable: ShellExecuteEx failed, error=%lu, command line: %s",
+             GetLastError(), args.c_str());
 }
